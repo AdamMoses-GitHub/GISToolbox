@@ -1,9 +1,13 @@
 """
 Tab 1: Create a KML Bounding Box
 """
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QCheckBox, QGroupBox, QRadioButton)
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox,
+    QSpinBox, QDoubleSpinBox, QPushButton, QCheckBox, QGroupBox, QFileDialog
+)
 from widgets.info_box import InfoBox
-from gis_utils import latlon_to_utm, utm_to_latlon, round_to_nearest, get_bbox_from_centroid, bbox_size_meters, meters_to_miles
+from gis_utils import latlon_to_utm, utm_to_latlon, round_to_nearest, get_bbox_from_centroid
+import shapefile
 
 class KMLBoundingBoxTab(QWidget):
     def __init__(self, parent=None):
@@ -72,6 +76,10 @@ class KMLBoundingBoxTab(QWidget):
         # SHP toggle
         self.save_shp = QCheckBox("Save Shapefile (SHP) alongside KML")
         form.addRow(self.save_shp)
+        # Add button to produce the bounding box and save KML/SHP
+        self.bbox_btn = QPushButton("Create Bounding Box")
+        self.bbox_btn.clicked.connect(self.create_bbox_and_select_kml)
+        form.addRow(self.bbox_btn)
         # Layout
         self.layout().addLayout(form)
         self.info_box = InfoBox()
@@ -84,9 +92,8 @@ class KMLBoundingBoxTab(QWidget):
         self.utm_northing.setValue(utm_n)
         self.utm_zone.setValue(utm_z)
         self.utm_ns.setCurrentIndex(0 if utm_ns else 1)
-        # Connect signals
-        self.coord_type_combo.setCurrentIndex(1)  # Default to Lat/Long
-        self.toggle_coord_inputs()
+        # Connect signals for real-time update
+        self.coord_type_combo.currentIndexChanged.connect(self.update_info_box)
         self.lat.valueChanged.connect(self.update_info_box)
         self.lon.valueChanged.connect(self.update_info_box)
         self.utm_easting.valueChanged.connect(self.update_info_box)
@@ -96,14 +103,33 @@ class KMLBoundingBoxTab(QWidget):
         self.width.valueChanged.connect(self.update_info_box)
         self.height.valueChanged.connect(self.update_info_box)
         self.round_utm.valueChanged.connect(self.update_info_box)
+        self.toggle_coord_inputs()
         self.update_info_box()
+
     def toggle_coord_inputs(self):
         utm_enabled = self.coord_type_combo.currentIndex() == 0
+        # Only enable UTM widgets if UTM is selected
         for w in [self.utm_easting, self.utm_northing, self.utm_zone, self.utm_ns]:
             w.setEnabled(utm_enabled)
+        # Only enable Lat/Lon widgets if Lat/Long is selected
         for w in [self.lat, self.lon]:
             w.setEnabled(not utm_enabled)
+
+    def create_bbox_and_select_kml(self):
+        # Update info box first
         self.update_info_box()
+        # Prompt user to select KML file to save
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save KML Bounding Box",
+            "",
+            "KML Files (*.kml);;All Files (*)"
+        )
+        if file_path:
+            self.generate_kml(file_path)
+            if self.save_shp.isChecked():
+                self.generate_shp(file_path)
+
     def update_info_box(self):
         # Get centroid in UTM
         if self.coord_type_combo.currentIndex() == 0:
@@ -111,21 +137,97 @@ class KMLBoundingBoxTab(QWidget):
             northing = self.utm_northing.value()
             zone = self.utm_zone.value()
             is_north = self.utm_ns.currentIndex() == 0
-            lat, lon = utm_to_latlon(easting, northing, zone, is_north)
         else:
             lat = self.lat.value()
             lon = self.lon.value()
             easting, northing, zone, is_north = latlon_to_utm(lat, lon)
-        # Round
+
+        # Round UTM centroid
         easting = round_to_nearest(easting, self.round_utm.value())
         northing = round_to_nearest(northing, self.round_utm.value())
-        # BBox
+
+        # Calculate BBox based on rounded UTM centroid and specified width/height
         bbox = get_bbox_from_centroid(easting, northing, self.width.value(), self.height.value())
-        width_m, height_m = bbox_size_meters(bbox)
-        width_mi = meters_to_miles(width_m)
-        height_mi = meters_to_miles(height_m)
-        utm_bbox = f"E: {bbox['east']:.2f}, W: {bbox['west']:.2f}, N: {bbox['north']:.2f}, S: {bbox['south']:.2f}"
-        latlon_bbox = f"E: {utm_to_latlon(bbox['east'], northing, zone, is_north)[1]:.6f}, W: {utm_to_latlon(bbox['west'], northing, zone, is_north)[1]:.6f}, N: {utm_to_latlon(easting, bbox['north'], zone, is_north)[0]:.6f}, S: {utm_to_latlon(easting, bbox['south'], zone, is_north)[0]:.6f}"
-        size_m = f"{width_m:.2f} x {height_m:.2f}"
-        size_mi = f"{width_mi:.2f} x {height_mi:.2f}"
-        self.info_box.update_info((lat, lon), utm_bbox, latlon_bbox, size_m, size_mi)
+
+        # Prepare corners: [top-left, top-right, bottom-right, bottom-left] in UTM
+        utm_corners = [
+            (bbox['west'], bbox['north'], zone, is_north),   # top-left
+            (bbox['east'], bbox['north'], zone, is_north),   # top-right
+            (bbox['east'], bbox['south'], zone, is_north),   # bottom-right
+            (bbox['west'], bbox['south'], zone, is_north),   # bottom-left
+        ]
+
+        # The info_box will calculate lat/lon corners, min/max extents, and sizes internally.
+        self.info_box.update_info(utm_corners, input_crs='utm')
+
+    def generate_kml(self, file_path):
+        # This method would use the current state of inputs to generate KML
+        # For demonstration, just writes a placeholder KML with the bounding box as a polygon
+        utm_corners = self.get_current_utm_corners()
+        # Convert UTM corners to lat/lon for KML
+        latlon_corners = [utm_to_latlon(e, n, z, ns) for (e, n, z, ns) in utm_corners]
+        # KML polygon coordinates string (lon,lat,0)
+        coords_str = " ".join([f"{lon},{lat},0" for (lat, lon) in latlon_corners] + [f"{latlon_corners[0][1]},{latlon_corners[0][0]},0"])
+        kml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <Placemark>
+    <name>{self.name_edit.text()}</name>
+    <Polygon>
+      <outerBoundaryIs>
+        <LinearRing>
+          <coordinates>
+            {coords_str}
+          </coordinates>
+        </LinearRing>
+      </outerBoundaryIs>
+    </Polygon>
+  </Placemark>
+</Document>
+</kml>
+"""
+        with open(file_path, "w") as f:
+            f.write(kml)
+
+    def generate_shp(self, file_path):
+        # Create a polygon shapefile for the bounding box
+        shp_path = file_path.rsplit(".", 1)[0] + ".shp"
+        utm_corners = self.get_current_utm_corners()
+        # Convert UTM corners to lat/lon for SHP (WGS84)
+        latlon_corners = [utm_to_latlon(e, n, z, ns) for (e, n, z, ns) in utm_corners]
+        # SHP expects (lon, lat)
+        poly_points = [(lon, lat) for (lat, lon) in latlon_corners]
+        # Ensure closed polygon
+        if poly_points[0] != poly_points[-1]:
+            poly_points.append(poly_points[0])
+        # Write shapefile
+        with shapefile.Writer(shp_path, shapeType=shapefile.POLYGON) as w:
+            w.field('NAME', 'C')
+            w.poly([poly_points])
+            w.record(self.name_edit.text())
+        # Write .prj file for WGS84
+        prj_path = shp_path.rsplit(".", 1)[0] + ".prj"
+        with open(prj_path, "w") as prj:
+            prj.write('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
+
+    def get_current_utm_corners(self):
+        # Helper to get the current UTM corners for export
+        if self.coord_type_combo.currentIndex() == 0:
+            easting = self.utm_easting.value()
+            northing = self.utm_northing.value()
+            zone = self.utm_zone.value()
+            is_north = self.utm_ns.currentIndex() == 0
+        else:
+            lat = self.lat.value()
+            lon = self.lon.value()
+            easting, northing, zone, is_north = latlon_to_utm(lat, lon)
+        easting = round_to_nearest(easting, self.round_utm.value())
+        northing = round_to_nearest(northing, self.round_utm.value())
+        bbox = get_bbox_from_centroid(easting, northing, self.width.value(), self.height.value())
+        utm_corners = [
+            (bbox['west'], bbox['north'], zone, is_north),   # top-left
+            (bbox['east'], bbox['north'], zone, is_north),   # top-right
+            (bbox['east'], bbox['south'], zone, is_north),   # bottom-right
+            (bbox['west'], bbox['south'], zone, is_north),   # bottom-left
+        ]
+        return utm_corners
