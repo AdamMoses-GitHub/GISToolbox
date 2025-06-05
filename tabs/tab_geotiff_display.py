@@ -96,6 +96,9 @@ class RasterDisplayTab(QWidget):
 
             # Try to detect UTM from proj string
             input_crs = 'wgs84' # Default to wgs84 if not UTM
+            native_crs_str = None
+            if proj:
+                native_crs_str = proj
             if 'UTM' in proj or 'PROJCS' in proj:
                 m = re.search(r'UTM zone (\d+)([NnSs])', proj)
                 if m:
@@ -104,7 +107,7 @@ class RasterDisplayTab(QWidget):
                     bbox = [(x, y, zone, is_north) for (x, y) in bbox]
                     input_crs = 'utm'
 
-            self.info_box.update_info(bbox, input_crs=input_crs)
+            self.info_box.update_info(bbox, input_crs=input_crs, native_crs=native_crs_str)
 
         except Exception as e:
             self.stats_box.setText(f"Error displaying raster: {e}")

@@ -66,7 +66,7 @@ CITIES = [
     {"name": "Zurich", "lat": 47.3769, "lon": 8.5417},
 ]
 
-def get_nearest_city(centroid):
+def get_nearest_city(centroid, return_coords=False):
     # centroid: (lat, lon)
     min_dist = float('inf')
     nearest = None
@@ -74,5 +74,8 @@ def get_nearest_city(centroid):
         dist = (city['lat'] - centroid[0]) ** 2 + (city['lon'] - centroid[1]) ** 2
         if dist < min_dist:
             min_dist = dist
-            nearest = city['name']
-    return nearest
+            nearest = city
+    if return_coords:
+        return nearest['name'], nearest['lat'], nearest['lon']
+    else:
+        return nearest['name']

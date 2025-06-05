@@ -78,11 +78,12 @@ class GDALInfoTab(QWidget):
 
                 input_crs = 'wgs84'
                 bbox_corners_for_info = []
-
+                native_crs_str = None
                 if proj:
                     srs = osr.SpatialReference()
                     try:
                         srs.ImportFromWkt(proj)
+                        native_crs_str = srs.ExportToPrettyWkt()  # Or use srs.GetAttrValue("PROJCS")/("GEOGCS") for a short name
                         if srs.IsProjected():
                             utm_zone = srs.GetUTMZone()
                             is_north = srs.IsNorth()
@@ -92,7 +93,6 @@ class GDALInfoTab(QWidget):
                                     (x, y, utm_zone, is_north) for (x, y) in native_corners
                                 ]
                             else:
-                                # Transform corners to WGS84 (lon, lat)
                                 target_srs = osr.SpatialReference()
                                 target_srs.ImportFromEPSG(4326)
                                 coord_transform = osr.CoordinateTransformation(srs, target_srs)
@@ -113,8 +113,9 @@ class GDALInfoTab(QWidget):
                 else:
                     bbox_corners_for_info = native_corners
                     input_crs = 'wgs84'
+                    native_crs_str = None
 
-                self.info_box.update_info(bbox_corners_for_info, input_crs=input_crs)
+                self.info_box.update_info(bbox_corners_for_info, input_crs=input_crs, native_crs=native_crs_str)
             else:
                 info = "Could not open raster file."
                 self.info_box.update_info([], input_crs='wgs84')
@@ -163,7 +164,12 @@ class GDALInfoTab(QWidget):
                                     (x, y, utm_zone, is_north) for (x, y) in bbox_from_subprocess
                                 ]
                                 subprocess_input_crs = 'utm'
-                        self.info_box.update_info(bbox_for_info_sub, input_crs=subprocess_input_crs)
+                        crs_line = None
+                        for line in info.splitlines():
+                            if line.strip().startswith("PROJCS") or line.strip().startswith("GEOGCS"):
+                                crs_line = line.strip()
+                                break
+                        self.info_box.update_info(bbox_for_info_sub, input_crs=subprocess_input_crs, native_crs=crs_line)
                     else:
                         self.info_box.update_info([], input_crs='wgs84')
                 else:

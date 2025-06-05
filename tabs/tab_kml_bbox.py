@@ -3,7 +3,7 @@ Tab 1: Create a KML Bounding Box
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox,
-    QSpinBox, QDoubleSpinBox, QPushButton, QCheckBox, QGroupBox, QFileDialog
+    QSpinBox, QDoubleSpinBox, QPushButton, QCheckBox, QGroupBox, QFileDialog, QSizePolicy
 )
 from widgets.info_box import InfoBox
 from gis_utils import latlon_to_utm, utm_to_latlon, round_to_nearest, get_bbox_from_centroid
@@ -82,7 +82,13 @@ class KMLBoundingBoxTab(QWidget):
         form.addRow(self.bbox_btn)
         # Layout
         self.layout().addLayout(form)
+        self.layout().addStretch()  # Add stretch to push InfoBox to the bottom
+
         self.info_box = InfoBox()
+        self.info_box.setMinimumHeight(140)  # Adjust as needed to match other tabs
+        self.info_box.setMaximumHeight(200)  # Optional: limit max height for consistency
+        # Fix: Use QSizePolicy.Fixed instead of self.info_box.sizePolicy().Fixed
+        self.info_box.setSizePolicy(self.info_box.sizePolicy().horizontalPolicy(), QSizePolicy.Fixed)
         self.layout().addWidget(self.info_box)
         # Set default to Washington Monument
         self.lat.setValue(38.8895)
@@ -158,7 +164,8 @@ class KMLBoundingBoxTab(QWidget):
         ]
 
         # The info_box will calculate lat/lon corners, min/max extents, and sizes internally.
-        self.info_box.update_info(utm_corners, input_crs='utm')
+        # For KML/SHP creation, always WGS84
+        self.info_box.update_info(utm_corners, input_crs='utm', native_crs="UTM (user input or derived from Lat/Lon)")
 
     def generate_kml(self, file_path):
         # This method would use the current state of inputs to generate KML

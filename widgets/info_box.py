@@ -18,15 +18,17 @@ class InfoBox(QGroupBox):
         self.latlon_label = QLabel()
         self.size_m_label = QLabel()
         self.size_mi_label = QLabel()
+        self.crs_label = QLabel()  # Add CRS label
         self.form.addRow("Sanity Check, Nearest Major City:", self.city_label)
         self.form.addRow("UTM Extents (min/max):", self.utm_label)
         self.form.addRow("Lat/Lon Extents (min/max):", self.latlon_label)
         self.form.addRow("Width/Height (meters):", self.size_m_label)
         self.form.addRow("Width/Height (miles):", self.size_mi_label)
-        for label in [self.city_label, self.utm_label, self.latlon_label, self.size_m_label, self.size_mi_label]:
+        self.form.addRow("Native CRS:", self.crs_label)  # Add CRS row
+        for label in [self.city_label, self.utm_label, self.latlon_label, self.size_m_label, self.size_mi_label, self.crs_label]:
             label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # Not editable, but selectable
 
-    def update_info(self, bbox, utm_bbox=None, latlon_bbox=None, size_m=None, size_mi=None, input_crs='wgs84'):
+    def update_info(self, bbox, utm_bbox=None, latlon_bbox=None, size_m=None, size_mi=None, input_crs='wgs84', native_crs=None):
         """
         bbox: list of 4 tuples (corners) in input_crs order: [top-left, top-right, bottom-right, bottom-left]
               For 'wgs84', tuples should be (lon, lat).
@@ -112,8 +114,22 @@ class InfoBox(QGroupBox):
             # Calculate centroid for city lookup (in lat/lon)
             centroid_lat = sum(lat_vals) / len(lat_vals) if lat_vals else 0
             centroid_lon = sum(lon_vals) / len(lon_vals) if lon_vals else 0
-            city = get_nearest_city((centroid_lat, centroid_lon))
-            self.city_label.setText(city)
+            city, city_lat, city_lon = get_nearest_city((centroid_lat, centroid_lon), return_coords=True)
+
+            # Calculate distance to nearest city (Haversine formula)
+            def haversine(lat1, lon1, lat2, lon2):
+                from math import radians, sin, cos, sqrt, atan2
+                R = 6371.0  # Earth radius in kilometers
+                dlat = radians(lat2 - lat1)
+                dlon = radians(lon2 - lon1)
+                a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+                c = 2 * atan2(sqrt(a), sqrt(1 - a))
+                return R * c
+
+            dist_km = haversine(centroid_lat, centroid_lon, city_lat, city_lon)
+            dist_mi = dist_km * 0.621371
+
+            self.city_label.setText(f"{city} ({dist_km:.1f} km / {dist_mi:.1f} mi)")
         else:
             latlon_str = "N/A"
             self.city_label.setText("N/A")
@@ -121,3 +137,15 @@ class InfoBox(QGroupBox):
 
         self.utm_label.setText(utm_str if utm_bbox is None else utm_bbox)
         self.latlon_label.setText(latlon_str if latlon_bbox is None else latlon_bbox)
+
+        # Set CRS label
+        if native_crs:
+            self.crs_label.setText(str(native_crs))
+        else:
+            # Show a default or inferred CRS
+            if input_crs == 'utm':
+                self.crs_label.setText("UTM")
+            elif input_crs == 'wgs84':
+                self.crs_label.setText("WGS84")
+            else:
+                self.crs_label.setText("Unknown")
