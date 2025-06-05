@@ -1,8 +1,8 @@
 """
 Reusable InfoBox widget for displaying bounding box and city info.
 """
-from PySide6.QtWidgets import QGroupBox, QFormLayout, QLabel, QVBoxLayout
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QGroupBox, QFormLayout, QLabel, QVBoxLayout, QMessageBox
+from PySide6.QtCore import Qt, Signal
 from resources.cities import get_nearest_city
 from gis_utils import latlon_to_utm, utm_to_latlon
 import math
@@ -18,15 +18,31 @@ class InfoBox(QGroupBox):
         self.latlon_label = QLabel()
         self.size_m_label = QLabel()
         self.size_mi_label = QLabel()
-        self.crs_label = QLabel()  # Add CRS label
+        self.crs_label = QLabel()
+        self.crs_label.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextBrowserInteraction)
+        self.crs_label.setOpenExternalLinks(False)
+        # Use linkActivated signal from QLabel, which passes the link string
+        self.crs_label.linkActivated.connect(self.show_full_crs_popup)
+        self._full_crs_text = None  # Store full CRS string for popup
+
         self.form.addRow("Sanity Check, Nearest Major City:", self.city_label)
         self.form.addRow("UTM Extents (min/max):", self.utm_label)
         self.form.addRow("Lat/Lon Extents (min/max):", self.latlon_label)
         self.form.addRow("Width/Height (meters):", self.size_m_label)
         self.form.addRow("Width/Height (miles):", self.size_mi_label)
-        self.form.addRow("Native CRS:", self.crs_label)  # Add CRS row
+        self.form.addRow("Native CRS:", self.crs_label)
         for label in [self.city_label, self.utm_label, self.latlon_label, self.size_m_label, self.size_mi_label, self.crs_label]:
-            label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # Not editable, but selectable
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextBrowserInteraction)
+
+    def show_full_crs_popup(self, link=None):
+        # Always show popup if _full_crs_text is set and link is activated
+        if self._full_crs_text:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Full Native CRS")
+            msg.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            msg.setIcon(QMessageBox.Information)
+            msg.setText(self._full_crs_text)
+            msg.exec()
 
     def update_info(self, bbox, utm_bbox=None, latlon_bbox=None, size_m=None, size_mi=None, input_crs='wgs84', native_crs=None):
         """
@@ -138,14 +154,25 @@ class InfoBox(QGroupBox):
         self.utm_label.setText(utm_str if utm_bbox is None else utm_bbox)
         self.latlon_label.setText(latlon_str if latlon_bbox is None else latlon_bbox)
 
-        # Set CRS label
+        # Set CRS label with truncation and popup if needed
         if native_crs:
-            self.crs_label.setText(str(native_crs))
+            crs_str = str(native_crs)
+            crs_str_oneline = crs_str.replace('\n', ' ').replace('\r', ' ')
+            if len(crs_str_oneline) > 50:
+                display_str = crs_str_oneline[:50] + '... <a href="#">(click for more)</a>'
+                self.crs_label.setText(display_str)
+                self._full_crs_text = crs_str  # Popup shows full (may have newlines)
+            else:
+                self.crs_label.setText(crs_str_oneline)
+                self._full_crs_text = None
         else:
             # Show a default or inferred CRS
             if input_crs == 'utm':
                 self.crs_label.setText("UTM")
+                self._full_crs_text = None
             elif input_crs == 'wgs84':
                 self.crs_label.setText("WGS84")
+                self._full_crs_text = None
             else:
                 self.crs_label.setText("Unknown")
+                self._full_crs_text = None
