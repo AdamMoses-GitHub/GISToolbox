@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget
 from tabs.tab_kml_bbox import KMLBoundingBoxTab
 from tabs.tab_gdal_info import GDALInfoTab
 from tabs.tab_geotiff_display import RasterDisplayTab
+from tabs.tab_batch_cut import BatchCutTab
 
 def launch_gui(app):
     window = MainWindow()
@@ -21,3 +22,4 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(KMLBoundingBoxTab(self), "Create KML Bounding Box")
         self.tabs.addTab(GDALInfoTab(self), "GDAL Info on File")
         self.tabs.addTab(RasterDisplayTab(self), "Display Raster File (GeoTiff/IMG)")
+        self.tabs.addTab(BatchCutTab(self), "Batch Cut")
