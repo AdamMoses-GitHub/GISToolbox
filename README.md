@@ -6,6 +6,7 @@ Welcome to the Swiss Army Knife of GIS data! This is your all-in-one, slightly o
 - **Tab 1:** Create a KML bounding box (with optional shapefile export!) around any point you like, in UTM or lat/lon. It even tells you the nearest major city, so you know if you’re in the right neighborhood.
 - **Tab 2:** Run `gdalinfo` on any raster file and see all the juicy metadata, plus a live sanity-check info box.
 - **Tab 3:** Display any GeoTiff or IMG raster file with a rainbow color map, and get instant stats. (Because who doesn’t love rainbows and stats?)
+- **Tab 4:** Batch cut multiple raster and vector files by the extent or geometry of another file, with coverage verification and output file naming
 
 ## Setup (Windows, Mac, Linux)
 1. **Install Python 3.9+** (if you don’t have it):  
